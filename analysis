@@ -1,0 +1,96 @@
+dev.off() # Clear the graph window
+cat('\014')  # Clear the console
+rm(list=ls()) # Clear user objects from the environment
+##########################################################################
+
+#1.Use setwd() to point to the folder where your data file is stored.
+#Use read_csv() to read your CSV file into a dataframe. In the code guides below the dataframe is sometimes referred to as "airData."
+library(readr)
+setwd("/Users/chloecandace/Downloads") #set working directory
+airData <- read_csv("IST387-Summer2020-airData-cng114.csv") #reads the csv file into a dataframe
+
+#2. Produce histograms of all the numeric variables except olong, olat, dlong, and dlat. Copy and paste each histogram into your report document
+#(in MS-Word) and write a sentence for each, describing what you see.
+hist(airData$age) #Produce histogram for age
+hist(airData$departure_delay_in_minutes) #Produce histogram for departure delay
+hist(airData$arrival_delay_in_minutes) #Produce histogram for arrival delay
+hist(airData$flight_time_in_minutes) #Produce histogram for flight time
+hist(airData$flight_distance) #Produce histogram for flight distance
+hist(airData$likelihood_to_recommend) #Produce histogram for the likelihood to recommend
+
+#3. Produce a table (using the table() function) of the categorical response variables (e.g., gender). Paste each result into your report and write a sentence for each, desribing what you see.
+table(airData$destination_city) #table of the destination city
+table(airData$origin_city) #table of the origin city
+table(airData$gender) #table of gender-male or female
+table(airData$type_of_travel) #table of type of travel-business, personal, and Mileage tickets.
+table(airData$flight_cancelled) #table of flights cancelled-yes or no
+table(airData$free_text) #table of free text
+
+#4. Produce three boxplots of likelihood_to_recommend, using each of these grouping variables: gender, type_of_travel, flight_cancelled.
+#Paste each boxplot into your report and write a sentence describing each one.
+airData$likelihood_to_recommend = as.factor(airData$likelihood_to_recommend) #convert from character to factor
+airData$gender = as.factor(airData$gender) #convert from character to factor
+airData$gender = as.numeric(airData$gender) #convert from factor to numeric
+boxplot(gender~likelihood_to_recommend, data = airData) #boxplot of likelihood_to_recommend using the gender grouping variable
+
+airData$type_of_travel = as.factor(airData$type_of_travel) #convert from character to factor
+airData$type_of_travel = as.numeric(airData$type_of_travel) #convert from factor to numeric
+boxplot(type_of_travel~likelihood_to_recommend, data = airData) #boxplot of likelihood_to_recommend using the type_of_travel grouping variable
+
+airData$flight_cancelled = as.factor(airData$flight_cancelled) #convert from character to factor
+airData$flight_cancelled = as.numeric(airData$flight_cancelled) #convert from factor to numeric
+boxplot(flight_cancelled~likelihood_to_recommend, data = airData) #boxplot of likelihood_to_recommend using the flight_cancelled grouping variable
+
+#5. Eliminate missing data by using the na.omit() command. For example, if your data frame was called airData, this would be the command.
+airData <- na.omit(airData) #Eliminate missing data
+
+#6.
+library(ggplot2)
+library(ggmap)
+newAir <- airData[,c(11)] #subsetting the airData dataset to only receive the likelihood_to_recommend column
+defractors <- data.frame(newAir) #create a new defractor dataset
+defractors <- subset(newAir,newAir$likelihood_to_recommend<7) #subset() to make sure all values are less than 7
+
+promoters <- data.frame(newAir) #create a new defractor dataset
+promoters <- subset(newAir,newAir$likelihood_to_recommend>8) #subset() to make sure all values are greater than 8
+
+usmap <- ggplot(defractors,aes(x=likelihood_to_recommend)) +
+  geom_point(aes(x=longitude,y=latitude,color=likelihood_to_recommend))
+usmap
+  get_stamenmap(bbox=c(left=-167.50,bottom=7.45,right=-50.19,top=71.58),
+                       zoom=3,maptype = "toner")
+ggmap(usmap) + geom_point(data=defractors,aes(x=dlong, y=dlat, color=likelihood_to_recommend))
+
+#7. #Create word clouds of the comment text-one for defractors and one for the promoters. 
+library(quanteda)
+write.table(defractors, file = "defractors.txt", sep = "") #convert dataframe to txt file
+charVector <- scan("defractors.txt", character(0),sep="\n")
+c <- corpus(charVector) #convert to a corpus
+frostDFM <- dfm(c,remove_punct=TRUE,remove=stopwords("english"),) #now convert the corpus to a document-feature matrix
+textplot_wordcloud(frostDFM,min_count=1) #Plot a word cloud
+
+write.table(defractors, file = "promoters.txt", sep = "") #convert dataframe to txt file
+charPromote <- scan("promoters.txt", character(0),sep="\n")
+wordcloud <- corpus(charPromote) #convert to a corpus
+frostDFM2 <- dfm(wordcloud,remove_punct=TRUE,remove=stopwords("english"),) #now convert the corpus to a document-feature matrix
+textplot_wordcloud(frostDFM2,min_count=1) #Plot a word cloud
+
+#8. Returning to the whole data set, convert some of the fields into factor variables and then use Association Rules Mining 
+#to see if there are patterns of attributes that connect with someone being dissatisfied with their flight.
+library(arules)
+library(arulesViz)
+airCat <- data.frame(Gender=as.factor(airData$gender), #converting into factor variables
+                     type=as.factor(airData$type_of_travel),
+                     old=(airData$age>median(airData$age)),
+                     delay=(airData$departure_delay_in_minutes>15), #delay is greater than 15 minutes
+                     detractor=(airData$likelihood_to_recommend<7)) #if the likelihood_to_recommend is less than 7, the passenger is a detractor
+airCatX <- as(airCat,"transactions") 
+#Coerce the airCat data frame into a sparse transactions matrix 
+ruleset <- apriori(airCatX,
+                   parameter = list(support=0.005,confidence=0.5),
+                   appearance = list(default="lhs",rhs=("detractor")))
+inspect(ruleset) 
+
+#9. Run an lm() model that uses age+gender+type_of_travel+flight_distance+departure_delay_in_minutes to predict likelihood_to_recommend
+likely_lm <- lm(formula = likelihood_to_recommend ~ age + gender + type_of_travel + flight_distance + departure_delay_in_minutes, data = airData) #use age, gender, etc to PREDICT likelihood of recommendation
+summary(likely_lm) #summarize the lm() model
